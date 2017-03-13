@@ -13,13 +13,14 @@ from utils import weight_variable, bias_variable, loglikelihood
 from config import Config
 
 from tensorflow.examples.tutorials.mnist import input_data
+from data_grabber import DataGrabber
 
 logging.getLogger().setLevel(logging.INFO)
 
 rnn_cell = tf.contrib.rnn
 seq2seq = tf.contrib.legacy_seq2seq
 
-mnist = input_data.read_data_sets('MNIST_data', one_hot=False)
+#mnist = input_data.read_data_sets('MNIST_data', one_hot=False)
 
 config = Config()
 n_steps = config.step
@@ -27,6 +28,7 @@ n_steps = config.step
 loc_mean_arr = []
 sampled_loc_arr = []
 
+data_grabber = DataGrabber()
 
 def get_next_input(output, i):
   loc, loc_mean = loc_net(output)
@@ -103,7 +105,8 @@ grads, _ = tf.clip_by_global_norm(grads, config.max_grad_norm)
 # learning rate
 global_step = tf.get_variable(
     'global_step', [], initializer=tf.constant_initializer(0), trainable=False)
-training_steps_per_epoch = mnist.train.num_examples // config.batch_size
+total_train_data = (config.total_positive_samples + config.total_negative_samples) // 2
+training_steps_per_epoch = total_train_data // config.batch_size #mnist.train.num_examples // config.batch_size
 starter_learning_rate = config.lr_start
 # decay per training epoch
 learning_rate = tf.train.exponential_decay(
@@ -117,12 +120,17 @@ opt = tf.train.AdamOptimizer(learning_rate)
 train_op = opt.apply_gradients(zip(grads, var_list), global_step=global_step)
 
 with tf.Session() as sess:
-  sess.run(tf.initialize_all_variables())
+  #sess.run(tf.initialize_all_variables())
+  sess.run(tf.global_variables_initializer())
+
   for i in range(n_steps):
-    images, labels = mnist.train.next_batch(config.batch_size)
+    #images, labels = mnist.train.next_batch(config.batch_size)
+
+    images_train, labels_train = data_grabber.get_train_data_labels_next_batch()
+
     # duplicate M times, see Eqn (2)
-    images = np.tile(images, [config.M, 1])
-    labels = np.tile(labels, [config.M])
+    images = np.tile(images_train, [config.M, 1])
+    labels = np.tile(labels_train, [config.M])
     loc_net.samping = True
     adv_val, baselines_mse_val, xent_val, logllratio_val, \
         reward_val, loss_val, lr_val, _ = sess.run(
@@ -132,6 +140,8 @@ with tf.Session() as sess:
                 images_ph: images,
                 labels_ph: labels
             })
+
+
     if i and i % 100 == 0:
       logging.info('step {}: lr = {:3.6f}'.format(i, lr_val))
       logging.info(
@@ -140,32 +150,45 @@ with tf.Session() as sess:
       logging.info('llratio = {:3.4f}\tbaselines_mse = {:3.4f}'.format(
           logllratio_val, baselines_mse_val))
 
+
     if i and i % training_steps_per_epoch == 0:
       # Evaluation
-      for dataset in [mnist.validation, mnist.test]:
-        steps_per_epoch = dataset.num_examples // config.eval_batch_size
-        correct_cnt = 0
-        num_samples = steps_per_epoch * config.batch_size
-        loc_net.sampling = True
-        for test_step in xrange(steps_per_epoch):
-          images, labels = dataset.next_batch(config.batch_size)
-          labels_bak = labels
-          # Duplicate M times
-          images = np.tile(images, [config.M, 1])
-          labels = np.tile(labels, [config.M])
-          softmax_val = sess.run(softmax,
-                                 feed_dict={
-                                     images_ph: images,
-                                     labels_ph: labels
-                                 })
-          softmax_val = np.reshape(softmax_val,
-                                   [config.M, -1, config.num_classes])
-          softmax_val = np.mean(softmax_val, 0)
-          pred_labels_val = np.argmax(softmax_val, 1)
-          pred_labels_val = pred_labels_val.flatten()
-          correct_cnt += np.sum(pred_labels_val == labels_bak)
-        acc = correct_cnt / num_samples
+      #for dataset in [mnist.validation, mnist.test]:
+      total_test_data = (config.total_positive_samples + config.total_negative_samples) // 2
+      steps_per_epoch = total_test_data // config.eval_batch_size #dataset.num_examples // config.eval_batch_size
+      correct_cnt = 0
+      num_samples = steps_per_epoch * config.batch_size
+      loc_net.sampling = True
+
+      for test_step in range(steps_per_epoch):
+        #images, labels = dataset.next_batch(config.batch_size)
+        images_test, labels_test = data_grabber.get_test_data_labels_next_batch()
+
+        labels_bak = labels_test
+
+        # Duplicate M times
+        images = np.tile(images_test, [config.M, 1])
+        labels = np.tile(labels_test, [config.M])
+
+        softmax_val = sess.run(softmax,
+                               feed_dict={
+                                   images_ph: images,
+                                   labels_ph: labels
+                               })
+        softmax_val = np.reshape(softmax_val,
+                                 [config.M, -1, config.num_classes])
+        softmax_val = np.mean(softmax_val, 0)
+        pred_labels_val = np.argmax(softmax_val, 1)
+        pred_labels_val = pred_labels_val.flatten()
+        correct_cnt += np.sum(pred_labels_val == labels_bak)
+
+      acc = correct_cnt / num_samples
+
+      '''
         if dataset == mnist.validation:
           logging.info('valid accuracy = {}'.format(acc))
         else:
           logging.info('test accuracy = {}'.format(acc))
+      '''
+
+      logging.info('test accuracy = {}'.format(acc))

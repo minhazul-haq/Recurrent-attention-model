@@ -2,9 +2,9 @@ class Config(object):
   win_size = 8
   bandwidth = win_size**2
   batch_size = 32
-  eval_batch_size = 50
+  eval_batch_size = 32 #50
   loc_std = 0.22
-  original_size = 28
+  original_size = 100
   num_channels = 1
   depth = 1
   sensor_size = win_size**2 * depth
@@ -16,7 +16,7 @@ class Config(object):
   cell_size = 256
   cell_out_size = cell_size
   num_glimpses = 6
-  num_classes = 10
+  num_classes = 2
   max_grad_norm = 5.
 
   step = 100000
@@ -25,3 +25,7 @@ class Config(object):
 
   # Monte Carlo sampling
   M = 10
+
+  # new constants
+  total_positive_samples = 9138
+  total_negative_samples = 7967
