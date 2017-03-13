@@ -16,8 +16,8 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 logging.getLogger().setLevel(logging.INFO)
 
-rnn_cell = tf.nn.rnn_cell
-seq2seq = tf.nn.seq2seq
+rnn_cell = tf.contrib.rnn
+seq2seq = tf.contrib.legacy_seq2seq
 
 mnist = input_data.read_data_sets('MNIST_data', one_hot=False)
 
@@ -68,7 +68,7 @@ for t, output in enumerate(outputs[1:]):
   baseline_t = tf.nn.xw_plus_b(output, w_baseline, b_baseline)
   baseline_t = tf.squeeze(baseline_t)
   baselines.append(baseline_t)
-baselines = tf.pack(baselines)  # [timesteps, batch_sz]
+baselines = tf.stack(baselines)  # [timesteps, batch_sz]
 baselines = tf.transpose(baselines)  # [batch_sz, timesteps]
 
 # Take the last step only.
@@ -81,7 +81,7 @@ logits = tf.nn.xw_plus_b(output, w_logit, b_logit)
 softmax = tf.nn.softmax(logits)
 
 # cross-entropy.
-xent = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, labels_ph)
+xent = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels_ph)
 xent = tf.reduce_mean(xent)
 pred_labels = tf.argmax(logits, 1)
 # 0/1 reward.
@@ -118,7 +118,7 @@ train_op = opt.apply_gradients(zip(grads, var_list), global_step=global_step)
 
 with tf.Session() as sess:
   sess.run(tf.initialize_all_variables())
-  for i in xrange(n_steps):
+  for i in range(n_steps):
     images, labels = mnist.train.next_batch(config.batch_size)
     # duplicate M times, see Eqn (2)
     images = np.tile(images, [config.M, 1])
